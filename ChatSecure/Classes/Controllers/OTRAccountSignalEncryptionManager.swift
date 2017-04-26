@@ -120,10 +120,14 @@ extension OTRAccountSignalEncryptionManager {
         return try sessionCipher.encryptData(data)
     }
     
-    public func decryptFromAddress(_ data:Data, name:String, deviceId:UInt32) throws -> Data {
+    public func decryptFromAddress(_ data:OMEMOKeyData, name:String, deviceId:UInt32) throws -> Data {
         let address = SignalAddress(name: name.lowercased(), deviceId: Int32(deviceId))
         let sessionCipher = SignalSessionCipher(address: address, context: self.signalContext)
-        let cipherText = SignalCiphertext(data: data, type: .unknown)
+        var type: SignalCiphertextType = .unknown
+        if (data.isPreKey) {
+            type = .preKeyMessage
+        }
+        let cipherText = SignalCiphertext(data: data.data, type: type)
         return try sessionCipher.decryptCiphertext(cipherText)
     }
     

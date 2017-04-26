@@ -139,13 +139,16 @@ import YapDatabase
         }
     }
     
+    // This might be causing problems with collisions for usernames shared between accounts
+    // Before scoping to account.uniqueId, migration must be written
     fileprivate func fetchUsername(_ yapKey:String, yapCollection:String, transaction:YapDatabaseReadTransaction) -> String? {
-        if let object = transaction.object(forKey: yapKey, inCollection: yapCollection) {
-            if object is OTRAccount {
-                return (object as AnyObject).username
-            } else if object is OTRBuddy {
-                return (object as AnyObject).username
-            }
+        guard let object = transaction.object(forKey: yapKey, inCollection: yapCollection) else {
+            return nil
+        }
+        if let account = object as? OTRAccount {
+            return account.username // + account.uniqueId
+        } else if let buddy = object as? OTRBuddy, let account = buddy.account(with: transaction) {
+            return buddy.username // + account.uniqueId
         }
         return nil
     }
@@ -162,15 +165,15 @@ import YapDatabase
         self.databaseConnection.read({ (transaction) in
             user = self.fetchUsername(device.parentKey, yapCollection: device.parentCollection, transaction: transaction)
         })
-        if let username = user {
-            let encryptedKeyData = try self.signalEncryptionManager.encryptToAddress(payload, name: username, deviceId: device.deviceId.uint32Value)
-            var isPreKey = false
-            if (encryptedKeyData.type == .preKeyMessage) {
-                isPreKey = true
-            }
-            return OMEMOKeyData(deviceId: device.deviceId.uint32Value, data: encryptedKeyData.data, isPreKey: isPreKey)
+        guard let username = user else {
+            return nil
         }
-        return nil
+        let encryptedKeyData = try self.signalEncryptionManager.encryptToAddress(payload, name: username, deviceId: device.deviceId.uint32Value)
+        var isPreKey = false
+        if (encryptedKeyData.type == .preKeyMessage) {
+            isPreKey = true
+        }
+        return OMEMOKeyData(deviceId: device.deviceId.uint32Value, data: encryptedKeyData.data, isPreKey: isPreKey)
     }
     
     /**
@@ -360,16 +363,16 @@ import YapDatabase
         
         //Could have multiple matching device id. This is extremely rare but possible that the sender has another device that collides with our device id.
         var unencryptedKeyData: Data?
-        for key in keyData {
-            if key.deviceId == rid {
-                let keyData = key.data
-                do {
-                    unencryptedKeyData = try self.signalEncryptionManager.decryptFromAddress(keyData, name: fromJID.bare(), deviceId: senderDeviceId)
-                    // have successfully decripted the AES key. We should break and use it to decrypt the payload
-                    break
-                } catch {
-                    return
-                }
+        for key in keyData where key.deviceId == rid {
+            do {
+                unencryptedKeyData = try self.signalEncryptionManager.decryptFromAddress(key, name: fromJID.bare(), deviceId: senderDeviceId)
+                // have successfully decripted the AES key. We should break and use it to decrypt the payload
+                break
+            } catch let error as NSError {
+                #if DEBUG
+                    NSLog("Error decrypting from address: %@", error)
+                #endif
+                return
             }
         }
         
