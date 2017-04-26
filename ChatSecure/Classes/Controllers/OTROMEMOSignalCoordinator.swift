@@ -9,6 +9,7 @@
 import UIKit
 import XMPPFramework
 import YapDatabase
+import SignalProtocolObjC
 
 /** 
  * This is the glue between XMPP/OMEMO and Signal
@@ -57,6 +58,24 @@ import YapDatabase
         return jid.isEqual(to: ourJID, options: XMPPJIDCompareBare)
     }
     
+    /// Will return OTRAccount if JID matches your own local account
+    fileprivate func yapCollectionForJID(_ jid: XMPPJID) -> String {
+        var collection = OTRBuddy.collection()
+        if self.isOurJID(jid) {
+            collection = OTRAccount.collection()
+        }
+        return collection
+    }
+    
+    /// Warning: Calling this will open a db read transaction. Do not call from within another transaction
+    fileprivate var account: OTRAccount? {
+        var _account: OTRAccount? = nil
+        self.databaseConnection.read { (t) in
+            _account = OTRAccount.fetchObject(withUniqueID: self.accountYapKey, transaction: t)
+        }
+        return _account
+    }
+    
     /** Always call on internal work queue */
     fileprivate func callAndRemoveOutstandingBundleBlock(_ elementId:String,success:Bool) {
         
@@ -86,15 +105,15 @@ import YapDatabase
      */
     open func prepareSession(_ yapKey:String, yapCollection:String, completion:@escaping (Bool) -> Void) {
         var devices:[OTROMEMODevice]? = nil
-        var user:String? = nil
+        var _parentProfile: OTRUserInfoProfile? = nil
         
         //Get all the devices ID's for this buddy as well as their username for use with signal and XMPPFramework.
         self.databaseConnection.read { (transaction) in
+            _parentProfile = transaction.object(forKey: yapKey, inCollection: yapCollection) as? OTRUserInfoProfile
             devices = OTROMEMODevice.allDevices(forParentKey: yapKey, collection: yapCollection, transaction: transaction)
-            user = self.fetchUsername(yapKey, yapCollection: yapCollection, transaction: transaction)
         }
         
-        guard let devs = devices, let username = user else {
+        guard let devs = devices, let parentProfile = _parentProfile else {
             self.callbackQueue.async(execute: {
                 completion(false)
             })
@@ -110,7 +129,10 @@ import YapDatabase
             let group = DispatchGroup()
             //For each device Check if we have a session. If not then we need to fetch it from their XMPP server.
             for device in devs where device.deviceId.uint32Value != self?.signalEncryptionManager.registrationId {
-                if !strongself.signalEncryptionManager.sessionRecordExistsForUsername(username, deviceId: device.deviceId.int32Value) || device.publicIdentityKeyData == nil {
+                let addressName = SignalAddress.addressName(jidStr: parentProfile.username, accountUniqueId: strongself.accountYapKey, parentYapCollection: yapCollection)
+                let address = SignalAddress(name: addressName, deviceId: Int32(device.deviceId))
+                
+                if !strongself.signalEncryptionManager.sessionRecordExistsForAddress(address: address) || device.publicIdentityKeyData == nil {
                     //No session for this buddy and device combo. We need to fetch the bundle.
                     //No public idenitty key data. We don't have enough information (for the user and UI) to encrypt this message.
                     
@@ -126,7 +148,7 @@ import YapDatabase
                         group.leave()
                     }
                     //Fetch the bundle
-                    strongself.omemoModule?.fetchBundle(forDeviceId: device.deviceId.uint32Value, jid: XMPPJID(string:username), elementId: elementId)
+                    strongself.omemoModule?.fetchBundle(forDeviceId: device.deviceId.uint32Value, jid: XMPPJID(string:parentProfile.username), elementId: elementId)
                 }
             }
             
@@ -141,17 +163,19 @@ import YapDatabase
     
     // This might be causing problems with collisions for usernames shared between accounts
     // Before scoping to account.uniqueId, migration must be written
-    fileprivate func fetchUsername(_ yapKey:String, yapCollection:String, transaction:YapDatabaseReadTransaction) -> String? {
-        guard let object = transaction.object(forKey: yapKey, inCollection: yapCollection) else {
-            return nil
-        }
-        if let account = object as? OTRAccount {
-            return account.username // + account.uniqueId
-        } else if let buddy = object as? OTRBuddy, let account = buddy.account(with: transaction) {
-            return buddy.username // + account.uniqueId
-        }
-        return nil
-    }
+//    fileprivate func fetchUsername(_ yapKey:String, yapCollection:String, transaction:YapDatabaseReadTransaction) -> String? {
+//        guard let object = transaction.object(forKey: yapKey, inCollection: yapCollection) else {
+//            return nil
+//        }
+//        if let account = object as? OTRAccount {
+//            return SignalAddress.addressName(jidStr: account.username, accountUniqueId: account.uniqueId, parentYapCollection: OTRAccount.collection())
+//            //return account.username
+//        } else if let buddy = object as? OTRBuddy {
+//            return SignalAddress.addressName(jidStr: buddy.username, accountUniqueId: buddy.accountUniqueId, parentYapCollection: OTRBuddy.collection())
+//            //return buddy.username
+//        }
+//        return nil
+//    }
     
     /**
      Check if we have valid sessions with our other devices and if not fetch their bundles and start sessions.
@@ -161,14 +185,15 @@ import YapDatabase
     }
     
     fileprivate func encryptPayloadWithSignalForDevice(_ device:OTROMEMODevice, payload:Data) throws -> OMEMOKeyData? {
-        var user:String? = nil
+        var profile:OTRUserInfoProfile? = nil
         self.databaseConnection.read({ (transaction) in
-            user = self.fetchUsername(device.parentKey, yapCollection: device.parentCollection, transaction: transaction)
+            profile = transaction.object(forKey: device.parentKey, inCollection: device.parentCollection) as? OTRUserInfoProfile
         })
-        guard let username = user else {
+        guard let username = profile?.username else {
             return nil
         }
-        let encryptedKeyData = try self.signalEncryptionManager.encryptToAddress(payload, name: username, deviceId: device.deviceId.uint32Value)
+        let address = SignalAddress(jidStr: username, accountUniqueId: self.accountYapKey, parentYapCollection: device.parentCollection, deviceId: Int32(device.deviceId))
+        let encryptedKeyData = try self.signalEncryptionManager.encryptToAddress(payload, address: address)
         var isPreKey = false
         if (encryptedKeyData.type == .preKeyMessage) {
             isPreKey = true
@@ -292,50 +317,38 @@ import YapDatabase
      - parameter deviceId: The OMEMO device id
     */
     open func removeDevice(_ devices:[OTROMEMODevice], completion:@escaping ((Bool) -> Void)) {
-        
         self.workQueue.async { [weak self] in
-            
-            guard let accountKey = self?.accountYapKey else {
+            guard let accountYapKey = self?.accountYapKey else {
                 completion(false)
                 return
             }
             //Array with tuple of username and the device
             //Needed to avoid nesting yap transactions
-            var usernameDeviceArray = [(String,OTROMEMODevice)]()
+            var usernameDeviceArray = [(SignalAddress,OTROMEMODevice)]()
             self?.databaseConnection.readWrite({ (transaction) in
                 devices.forEach({ (device) in
                     
-                    // Get the username if buddy or account. Could possibly be extracted into a extension or protocol
-                    let extractUsername:(AnyObject?) -> String? = { object in
-                        switch object {
-                        case let buddy as OTRBuddy:
-                            return buddy.username
-                        case let account as OTRAccount:
-                            return account.username
-                        default: return nil
-                        }
-                    }
-                    
                     //Need the parent object to get the username
-                    let buddyOrAccount = transaction.object(forKey: device.parentKey, inCollection: device.parentCollection)
-                    
-                    
-                    if let username = extractUsername(buddyOrAccount as AnyObject?) {
-                        usernameDeviceArray.append((username,device))
+                    guard let profile = transaction.object(forKey: device.parentKey, inCollection: device.parentCollection) as? OTRUserInfoProfile else {
+                        return
                     }
+                    let addressName = SignalAddress.addressName(jidStr: profile.username, accountUniqueId: accountYapKey, parentYapCollection: device.parentCollection)
+                    let address = SignalAddress(name: addressName, deviceId: Int32(device.deviceId))
+                    usernameDeviceArray.append((address,device))
+                    
                     device.remove(with: transaction)
                 })
             })
             
             //For each username device pair remove the underlying signal session
-            usernameDeviceArray.forEach({ (username,device) in
-                _ = self?.signalEncryptionManager.removeSessionRecordForUsername(username, deviceId: device.deviceId.int32Value)
+            usernameDeviceArray.forEach({ (address,device) in
+                _ = self?.signalEncryptionManager.removeSessionRecordForAddress(address: address)
             })
             
             
             let remoteDevicesToRemove = devices.filter({ (device) -> Bool in
                 // Can only remove devices that belong to this account from the remote server.
-                return device.parentKey == accountKey && device.parentCollection == OTRAccount.collection()
+                return device.parentKey == accountYapKey && device.parentCollection == OTRAccount.collection()
             })
             
             if( remoteDevicesToRemove.count > 0 ) {
@@ -360,12 +373,22 @@ import YapDatabase
         }
         
         let rid = self.signalEncryptionManager.registrationId
+        var parentYapCollection = OTRBuddy.collection()
+        guard let account = self.account else {
+            return
+        }
+        // Assume incoming stuff from your JID is linked to your OTRAccount object
+        if fromJID.bare() as String == account.username {
+            parentYapCollection = OTRAccount.collection()
+        }
         
         //Could have multiple matching device id. This is extremely rare but possible that the sender has another device that collides with our device id.
         var unencryptedKeyData: Data?
         for key in keyData where key.deviceId == rid {
             do {
-                unencryptedKeyData = try self.signalEncryptionManager.decryptFromAddress(key, name: fromJID.bare(), deviceId: senderDeviceId)
+                let addressName = SignalAddress.addressName(jidStr: fromJID.bare() as String, accountUniqueId: self.accountYapKey, parentYapCollection: parentYapCollection)
+                let address = SignalAddress(name: addressName, deviceId: Int32(key.deviceId))
+                unencryptedKeyData = try self.signalEncryptionManager.decryptFromAddress(key, address: address)
                 // have successfully decripted the AES key. We should break and use it to decrypt the payload
                 break
             } catch let error as NSError {
@@ -533,6 +556,9 @@ extension OTROMEMOSignalCoordinator: OMEMOModuleDelegate {
         }
         
         self.workQueue.async { [weak self] in
+            guard let strongSelf = self else {
+                return
+            }
             let elementId = outgoingIq.elementID()
             if (bundle.preKeys.count == 0) {
                 self?.callAndRemoveOutstandingBundleBlock(elementId!, success: false)
@@ -547,7 +573,9 @@ extension OTROMEMOSignalCoordinator: OMEMOModuleDelegate {
             //Consume the incoming bundle. This goes through signal and should hit the storage delegate. So we don't need to store ourselves here.
             var result = false
             do {
-                try self?.signalEncryptionManager.consumeIncomingBundle(fromJID.bare(), bundle: incomingBundle)
+                let addressName = SignalAddress.addressName(jidStr: fromJID.bare() as String, accountUniqueId: strongSelf.accountYapKey, parentYapCollection: strongSelf.yapCollectionForJID(fromJID))
+                let address = SignalAddress(name: addressName, deviceId: Int32(bundle.deviceId))
+                try self?.signalEncryptionManager.consumeIncomingBundle(incomingAddress: address, bundle: incomingBundle)
                 result = true
             } catch let err as NSError {
                 #if DEBUG
@@ -683,6 +711,8 @@ extension OTROMEMOSignalCoordinator:OMEMOStorageDelegate {
     }
 
     public func isSessionValid(_ jid: XMPPJID, deviceId: UInt32) -> Bool {
-        return self.signalEncryptionManager.sessionRecordExistsForUsername(jid.bare(), deviceId: Int32(deviceId))
+        let collection = yapCollectionForJID(jid)
+        let address = SignalAddress(jidStr: jid.bare(), accountUniqueId: self.accountYapKey, parentYapCollection: collection, deviceId: Int32(deviceId))
+        return self.signalEncryptionManager.sessionRecordExistsForAddress(address: address)
     }
 }

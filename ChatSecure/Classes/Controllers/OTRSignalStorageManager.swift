@@ -228,24 +228,28 @@ open class OTRSignalStorageManager: NSObject {
     
     fileprivate func parentKeyAndCollectionForSignalAddress(_ signalAddress:SignalAddress, transaction:YapDatabaseReadTransaction) -> OTRDatabaseEntry? {
         var parentKey:String? = nil
-        var parentCollection:String? = nil
         
-        let ourAccount = OTRAccount.fetchObject(withUniqueID: self.accountKey, transaction: transaction)
-        if ourAccount?.username == signalAddress.name {
-            
-            parentKey = self.accountKey
-            parentCollection = OTRAccount.collection()
-            
-        } else if let buddy = OTRBuddy.fetch(withUsername: signalAddress.name, withAccountUniqueId: self.accountKey, transaction: transaction) {
-            parentKey = buddy.uniqueId
-            parentCollection = OTRBuddy.collection()
-        }
-        
-        guard let key = parentKey, let collection = parentCollection else {
+        guard let accountUniqueId = signalAddress.accountUniqueId,
+            let parentCollection = signalAddress.parentYapCollection,
+            let jid = signalAddress.jidStr,
+            let parentAccount = OTRAccount.fetchObject(withUniqueID: accountUniqueId, transaction: transaction),
+            let ourAccount = OTRAccount.fetchObject(withUniqueID: self.accountKey,
+                                                    transaction: transaction),
+            parentAccount.username == ourAccount.username else {
             return nil
         }
         
-        return OTRDatabaseEntry(key: key, collection: collection)
+        if let buddy = OTRBuddy.fetch(withUsername: jid, withAccountUniqueId: accountUniqueId, transaction: transaction) {
+            parentKey = buddy.uniqueId
+        } else {
+            parentKey = ourAccount.uniqueId
+        }
+        
+        guard let key = parentKey else {
+            return nil
+        }
+        
+        return OTRDatabaseEntry(key: key, collection: parentCollection)
     }
 }
 //MARK: SignalStore
@@ -490,4 +494,46 @@ extension OTRSignalStorageManager: SignalStore {
         }
         return senderKeyData
     }
+}
+
+public extension SignalAddress {
+    
+    public convenience init(jidStr: String,
+                     accountUniqueId: String,
+                     parentYapCollection: String, deviceId: Int32) {
+        let name = SignalAddress.addressName(jidStr: jidStr, accountUniqueId: accountUniqueId, parentYapCollection: parentYapCollection)
+        self.init(name: name, deviceId: deviceId)
+    }
+    
+    private var components: [String]? {
+        let components = self.name.components(separatedBy: SignalAddress.SeparatorString)
+        if components.count == 3 {
+            return components
+        }
+        return nil
+    }
+    
+    public static var SeparatorString: String {
+        return "///"
+    }
+    
+    public var accountUniqueId: String? {
+        return components?[2]
+    }
+    
+    public var jidStr: String? {
+        return components?[1]
+    }
+    
+    public var parentYapCollection: String? {
+        return components?[0]
+    }
+    
+    /// Returns a value for the 'name' property that corresponds these additional parameters
+    public static func addressName(jidStr: String,
+                            accountUniqueId: String,
+                            parentYapCollection: String) -> String {
+        return parentYapCollection + SeparatorString + jidStr + SeparatorString +  accountUniqueId
+    }
+
 }

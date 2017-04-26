@@ -105,23 +105,23 @@ extension OTRAccountSignalEncryptionManager {
     /**
      * This processes fetched OMEMO bundles. After you consume a bundle you can then create preKeyMessages to send to the contact.
      */
-    public func consumeIncomingBundle(_ name:String, bundle:OTROMEMOBundleIncoming) throws {
-        let deviceId = Int32(bundle.bundle.deviceId)
-        let incomingAddress = SignalAddress(name: name.lowercased(), deviceId: deviceId)
+    public func consumeIncomingBundle(incomingAddress: SignalAddress, bundle:OTROMEMOBundleIncoming) throws {
+        // let deviceId = Int32(bundle.bundle.deviceId)
+        // let incomingAddress = SignalAddress(name: name.lowercased(), deviceId: deviceId)
         let sessionBuilder = SignalSessionBuilder(address: incomingAddress, context: self.signalContext)
         let preKeyBundle = try SignalPreKeyBundle(registrationId: 0, deviceId: bundle.bundle.deviceId, preKeyId: bundle.preKeyId, preKeyPublic: bundle.preKeyData, signedPreKeyId: bundle.bundle.signedPreKeyId, signedPreKeyPublic: bundle.bundle.signedPublicPreKey, signature: bundle.bundle.signedPreKeySignature, identityKey: bundle.bundle.publicIdentityKey)
         
         return try sessionBuilder.processPreKeyBundle(preKeyBundle)
     }
     
-    public func encryptToAddress(_ data:Data, name:String, deviceId:UInt32) throws -> SignalCiphertext {
-        let address = SignalAddress(name: name.lowercased(), deviceId: Int32(deviceId))
+    public func encryptToAddress(_ data:Data, address: SignalAddress) throws -> SignalCiphertext {
+        // let address = SignalAddress(name: name.lowercased(), deviceId: Int32(deviceId))
         let sessionCipher = SignalSessionCipher(address: address, context: self.signalContext)
         return try sessionCipher.encryptData(data)
     }
     
-    public func decryptFromAddress(_ data:OMEMOKeyData, name:String, deviceId:UInt32) throws -> Data {
-        let address = SignalAddress(name: name.lowercased(), deviceId: Int32(deviceId))
+    public func decryptFromAddress(_ data:OMEMOKeyData, address: SignalAddress) throws -> Data {
+        //let address = SignalAddress(name: name.lowercased(), deviceId: Int32(deviceId))
         let sessionCipher = SignalSessionCipher(address: address, context: self.signalContext)
         var type: SignalCiphertextType = .unknown
         if (data.isPreKey) {
@@ -142,13 +142,13 @@ extension OTRAccountSignalEncryptionManager {
         return nil
     }
     
-    public func sessionRecordExistsForUsername(_ username:String, deviceId:Int32) -> Bool {
-        let address = SignalAddress(name: username.lowercased(), deviceId: deviceId)
+    public func sessionRecordExistsForAddress(address: SignalAddress) -> Bool {
+        //let address = SignalAddress(name: username.lowercased(), deviceId: deviceId)
         return self.storage.sessionRecordExists(for: address)
     }
     
-    public func removeSessionRecordForUsername(_ username:String, deviceId:Int32) -> Bool {
-        let address = SignalAddress(name: username.lowercased(), deviceId: deviceId)
+    public func removeSessionRecordForAddress(address: SignalAddress) -> Bool {
+        // let address = SignalAddress(name: username.lowercased(), deviceId: deviceId)
         return self.storage.deleteSessionRecord(for: address)
     }
 }
