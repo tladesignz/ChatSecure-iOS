@@ -116,6 +116,9 @@ public enum OMEMOBundleError: Error {
     case notFound
     case invalid
     case keyGeneration
+    case noIdentityKey
+    case noSignedPreKey
+    case couldNotSave
 }
 
 extension OTRXMPPXMLError: ChatSecureErrorProtocol {

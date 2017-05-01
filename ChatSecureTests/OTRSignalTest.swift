@@ -7,6 +7,7 @@
 //
 
 import XCTest
+import SignalProtocolObjC
 @testable import ChatSecureCore
 
 class OTRSignalTest: XCTestCase {
@@ -60,7 +61,7 @@ class OTRSignalTest: XCTestCase {
             buddy.username = otherAccount.username
             buddy.save(with:transaction)
             
-            let device = OTROMEMODevice(deviceId: NSNumber(value:otherEncryptionManager.registrationId), trustLevel: .trustedTofu, parentKey: buddy.uniqueId, parentCollection: OTRBuddy.collection(), publicIdentityKeyData: nil, lastSeenDate:nil)
+            let device = OTROMEMODevice(deviceId: NSNumber(value:otherEncryptionManager.registrationId), trustLevel: .trustedTofu, parentKey: ourAccount.uniqueId, parentCollection: OTRAccount.collection(), publicIdentityKeyData: nil, lastSeenDate:nil)
             device.save(with:transaction)
         })
         
@@ -71,16 +72,23 @@ class OTRSignalTest: XCTestCase {
         let preKeyInfo = ourOutgoingBundle.preKeys.first!
         let incomingBundle = OTROMEMOBundleIncoming(bundle: ourOutgoingBundle.bundle, preKeyId: preKeyInfo.0, preKeyData: preKeyInfo.1)
         // 'Other' device is now able to send messages to 'Our' device
-        try! otherEncryptionManager.consumeIncomingBundle(ourAccount.username, bundle: incomingBundle)
+        let ourAddress = SignalAddress(jidStr: ourAccount.username, accountUniqueId: ourAccount.uniqueId, parentYapCollection: OTRAccount.collection(), deviceId: Int32(ourOutgoingBundle.bundle.deviceId))
+        do {
+            try otherEncryptionManager.consumeIncomingBundle(incomingAddress: ourAddress, bundle: incomingBundle)
+        } catch let error {
+            XCTFail("Error consuming bundle \(error)")
+        }
         
         let firstString = "Hi buddy"
         let data = firstString.data(using: String.Encoding.utf8)!
-        let encryptedData = try! otherEncryptionManager.encryptToAddress(data, name: ourAccount.username, deviceId: incomingBundle.bundle.deviceId)
+        let encryptedData = try! otherEncryptionManager.encryptToAddress(data, address: ourAddress)
         XCTAssertNotNil(encryptedData, "Created encrypted data")
         print("\(encryptedData.data)")
         
+        let otherAddress = SignalAddress(jidStr: otherAccount.username, accountUniqueId: ourAccount.uniqueId, parentYapCollection: OTRBuddy.collection(), deviceId: Int32(otherEncryptionManager.registrationId))
+        let payload = OMEMOKeyData(deviceId: otherEncryptionManager.registrationId, data: encryptedData.data, isPreKey: encryptedData.type == .preKeyMessage)
         // In the real world this encrypted data would be sent over the wire
-        let decryptedData = try! ourEncryptionManager.decryptFromAddress(encryptedData.data, name: otherAccount.username, deviceId: otherEncryptionManager.registrationId)
+        let decryptedData = try! ourEncryptionManager.decryptFromAddress(payload, address: otherAddress)
         let secondString = String(data: decryptedData, encoding: .utf8)
         XCTAssertEqual(firstString, secondString,"Equal Strings")
     

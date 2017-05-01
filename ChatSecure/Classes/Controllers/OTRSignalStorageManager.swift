@@ -10,9 +10,10 @@ import UIKit
 import SignalProtocolObjC
 import YapDatabase
 
-public protocol OTRSignalStorageManagerDelegate: class {
+public protocol OTRSignalStorageManagerDelegate: NSObjectProtocol {
     /** Generate a new account key*/
-    func generateNewIdenityKeyPairForAccountKey(_ accountKey:String) -> OTRAccountSignalIdentity
+    func generateNewIdentityKeyPairForAccountKey(_ accountKey:String) -> OTRAccountSignalIdentity
+    func generateRandomSignedPreKey(identity: OTRAccountSignalIdentity) -> SignalSignedPreKey?
 }
 
 /**
@@ -38,17 +39,20 @@ open class OTRSignalStorageManager: NSObject {
     
     /** 
      Convenience function to create a new OTRAccountSignalIdentity and save it to yap
+     Also generates a signed pre key.
      
      - returns: an OTRAccountSignalIdentity that is already saved to the database
      */
-    fileprivate func generateNewIdenityKeyPair() -> OTRAccountSignalIdentity {
+    func generateNewIdentityKeyPair() -> OTRAccountSignalIdentity {
         // Might be a better way to guarantee we have an OTRAccountSignalIdentity
-        let identityKeyPair = (self.delegate?.generateNewIdenityKeyPairForAccountKey(self.accountKey))!
-        
+        let identityKeyPair = (self.delegate?.generateNewIdentityKeyPairForAccountKey(self.accountKey))!
+        let rawSignedPreKey = (self.delegate?.generateRandomSignedPreKey(identity: identityKeyPair))!
+        let signedPreKey = OTRSignalSignedPreKey(accountKey: self.accountKey, keyId: rawSignedPreKey.preKeyId(), keyData: rawSignedPreKey.serializedData()!)
+        identityKeyPair.signedPreKeyUniqueId = signedPreKey.uniqueId
         self.databaseConnection.readWrite { (transaction) in
+            signedPreKey.save(with: transaction)
             identityKeyPair.save(with: transaction)
         }
-        
         return identityKeyPair
     }
     
@@ -59,10 +63,23 @@ open class OTRSignalStorageManager: NSObject {
      
      returns: An OTRAccountSignalIdentity or nil if none was created and stored.
      */
-    fileprivate func accountSignalIdentity() -> OTRAccountSignalIdentity? {
+    public func accountSignalIdentity() -> OTRAccountSignalIdentity? {
         var identityKeyPair:OTRAccountSignalIdentity? = nil
         self.databaseConnection.read { (transaction) in
             identityKeyPair = OTRAccountSignalIdentity.fetchObject(withUniqueID: self.accountKey, transaction: transaction)
+        }
+        
+        if identityKeyPair?.signedPreKeyUniqueId == nil {
+            self.databaseConnection.readWrite({ (transaction) in
+                // There used to only be one signed prekey in the store, keyed to your account
+                if let identityKeyPair = identityKeyPair?.copy() as? OTRAccountSignalIdentity,
+                    let oldSignedPreKey = OTRSignalSignedPreKey.fetchObject(withUniqueID: self.accountKey, transaction: transaction) {
+                    let migratedSignedPreKey = OTRSignalSignedPreKey(accountKey: self.accountKey, keyId: oldSignedPreKey.keyId, keyData: oldSignedPreKey.keyData)
+                    migratedSignedPreKey.save(with: transaction)
+                    identityKeyPair.signedPreKeyUniqueId = migratedSignedPreKey.uniqueId
+                    identityKeyPair.save(with: transaction)
+                }
+            })
         }
         
         return identityKeyPair
@@ -162,22 +179,30 @@ open class OTRSignalStorageManager: NSObject {
     open func fetchOurExistingBundle() throws -> OTROMEMOBundleOutgoing {
         var simpleBundle:OTROMEMOBundle? = nil
         //Fetch and create the base bundle
+        var outError: Error? = nil
+        guard let identityKeyPair = self.accountSignalIdentity() else {
+            throw OMEMOBundleError.noIdentityKey
+        }
         self.databaseConnection.read { (transaction) in
             do {
-                guard let identityKeyPair = OTRAccountSignalIdentity.fetchObject(withUniqueID: self.accountKey, transaction: transaction),
-                    let signedPreKeyDataObject = OTRSignalSignedPreKey.fetchObject(withUniqueID: self.accountKey, transaction: transaction) else {
-                        return
+                guard let signalSignedPreKey = identityKeyPair.signedPreKey(with: transaction) else {
+                    outError = OMEMOBundleError.noSignedPreKey
+                    return
                 }
-                let signedPreKey = try SignalSignedPreKey(serializedData: signedPreKeyDataObject.keyData)
+                
+                let signedPreKey = try SignalSignedPreKey(serializedData: signalSignedPreKey.keyData)
                 
                 let publicIdentityKey = identityKeyPair.identityKeyPair.publicKey
                 simpleBundle = OTROMEMOBundle(deviceId: identityKeyPair.registrationId, publicIdentityKey: publicIdentityKey, signedPublicPreKey: signedPreKey.keyPair().publicKey, signedPreKeyId: signedPreKey.preKeyId(), signedPreKeySignature: signedPreKey.signature())
-            } catch {
-                
+            } catch let error {
+                outError = error
             }
         }
         
         guard let bundle = simpleBundle else  {
+            if let error = outError {
+                throw error
+            }
             throw OMEMOBundleError.notFound
         }
         
@@ -193,20 +218,24 @@ open class OTRSignalStorageManager: NSObject {
                 let signalPreKey = try SignalPreKey(serializedData: data)
                 
                 preKeyDict.updateValue(signalPreKey.keyPair().publicKey, forKey: preKey.keyId)
-            } catch {
-                
+            } catch let error {
+                outError = error
             }
         })
+
         
         do {
             if let preKey = preKeys.first, let preKeyData = preKey.keyData {
-                let _ = try SignalPreKeyBundle(registrationId: 0, deviceId: bundle.deviceId, preKeyId: preKey.keyId, preKeyPublic: preKeyData, signedPreKeyId: bundle.signedPreKeyId, signedPreKeyPublic: bundle.signedPublicPreKey, signature: bundle.signedPreKeySignature, identityKey: bundle.publicIdentityKey)
+                let signalPreKey = try SignalPreKey(serializedData: preKeyData)
+                let _ = try SignalPreKeyBundle(registrationId: 0, deviceId: bundle.deviceId, preKeyId: preKey.keyId, preKeyPublic: signalPreKey.keyPair().publicKey, signedPreKeyId: bundle.signedPreKeyId, signedPreKeyPublic: bundle.signedPublicPreKey, signature: bundle.signedPreKeySignature, identityKey: bundle.publicIdentityKey)
             } else {
-                //DDLogError("Error fetching outgoing bundle: no prekeys")
-                throw OMEMOBundleError.invalid
+                outError = OMEMOBundleError.invalid
             }
         } catch let error {
-            //DDLogError("Error fetching outgoing bundle: \(error)")
+            outError = error
+        }
+        
+        if let error = outError {
             throw error
         }
         
@@ -321,8 +350,8 @@ extension OTRSignalStorageManager: SignalStore {
         var preKeyData:Data? = nil
         self.databaseConnection.read { (transaction) in
             let yapKey = OTRSignalPreKey.uniqueKey(forAccountKey: self.accountKey, keyId: preKeyId)
-            if let signedPreKey = OTRSignalPreKey.fetchObject(withUniqueID: yapKey, transaction: transaction) {
-                preKeyData = signedPreKey.keyData
+            if let preKey = OTRSignalPreKey.fetchObject(withUniqueID: yapKey, transaction: transaction) {
+                preKeyData = preKey.keyData
             }
         }
         return preKeyData
@@ -362,8 +391,9 @@ extension OTRSignalStorageManager: SignalStore {
     //MARK: SignalSignedPreKeyStore
     public func loadSignedPreKey(withId signedPreKeyId: UInt32) -> Data? {
         var preKeyData:Data? = nil
+        let uniqueId = OTRSignalSignedPreKey.uniqueId(forAccountKey: self.accountKey, keyId: signedPreKeyId)
         self.databaseConnection.read { (transaction) in
-            if let signedPreKey = OTRSignalSignedPreKey.fetchObject(withUniqueID: self.accountKey, transaction: transaction) {
+            if let signedPreKey = OTRSignalSignedPreKey.fetchObject(withUniqueID: uniqueId, transaction: transaction) {
                 preKeyData = signedPreKey.keyData
             }
         }
@@ -372,11 +402,14 @@ extension OTRSignalStorageManager: SignalStore {
     }
     
     public func storeSignedPreKey(_ signedPreKey: Data, signedPreKeyId: UInt32) -> Bool {
-        guard let signedPreKeyDatabaseObject = OTRSignalSignedPreKey(accountKey: self.accountKey, keyId: signedPreKeyId, keyData: signedPreKey) else {
-            return false
-        }
+        let signedPreKeyDatabaseObject = OTRSignalSignedPreKey(accountKey: self.accountKey, keyId: signedPreKeyId, keyData: signedPreKey)
         self.databaseConnection.readWrite { (transaction) in
             signedPreKeyDatabaseObject.save(with: transaction)
+
+            if let signalIdentity = OTRAccountSignalIdentity.fetchObject(withUniqueID: self.accountKey, transaction: transaction)?.copy() as? OTRAccountSignalIdentity {
+                signalIdentity.signedPreKeyUniqueId = signedPreKeyDatabaseObject.uniqueId
+                signalIdentity.save(with: transaction)
+            }
         }
         return true
         
@@ -391,8 +424,9 @@ extension OTRSignalStorageManager: SignalStore {
     }
     
     public func removeSignedPreKey(withId signedPreKeyId: UInt32) -> Bool {
+        let uniqueId = OTRSignalSignedPreKey.uniqueId(forAccountKey: self.accountKey, keyId: signedPreKeyId)
         self.databaseConnection.readWrite { (transaction) in
-            transaction.removeObject(forKey: self.accountKey, inCollection: OTRSignalSignedPreKey.collection())
+            transaction.removeObject(forKey: uniqueId, inCollection: OTRSignalSignedPreKey.collection())
         }
         return true
     }
@@ -404,7 +438,7 @@ extension OTRSignalStorageManager: SignalStore {
             return result.identityKeyPair
         }
         //Generate new identitiy key pair?
-        return self.generateNewIdenityKeyPair().identityKeyPair
+        return self.generateNewIdentityKeyPair().identityKeyPair
     }
     
     public func getLocalRegistrationId() -> UInt32 {
@@ -413,7 +447,7 @@ extension OTRSignalStorageManager: SignalStore {
             return result.registrationId;
         } else {
             //Generate new registration ID?
-            return self.generateNewIdenityKeyPair().registrationId
+            return self.generateNewIdentityKeyPair().registrationId
         }
     }
     

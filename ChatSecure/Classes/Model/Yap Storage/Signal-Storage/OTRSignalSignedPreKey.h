@@ -16,7 +16,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) uint32_t keyId;
 @property (nonatomic, strong) NSData *keyData;
 
-- (nullable instancetype)initWithAccountKey:(NSString *)accountKey keyId:(uint32_t)keyId keyData:(NSData *)keyData;
+- (instancetype)initWithAccountKey:(NSString *)accountKey keyId:(uint32_t)keyId keyData:(NSData *)keyData;
+
+/** This value is used for the uniqueId property and can be used for fetchObjectWithUniqueId */
++ (NSString*) uniqueIdForAccountKey:(NSString*)accountKey keyId:(uint32_t)keyId;
 
 @end
 

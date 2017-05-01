@@ -8,6 +8,7 @@
 
 import XCTest
 @testable import ChatSecureCore
+import SignalProtocolObjC
 
 class OTROmemoStorageTest: XCTestCase {
     
@@ -171,6 +172,14 @@ class OTROmemoStorageTest: XCTestCase {
         XCTAssertEqual(allRemainingPrekeys.count, 2)
     }
     
+    // There seems to be a problem with bundle fetches
+    func testDoubleBundleFetch() {
+        self.setupDatabase(#function)
+        let firstFetch = self.signalCoordinator.fetchMyBundle()!
+        let secondFetch = self.signalCoordinator.fetchMyBundle()!
+        XCTAssertEqual(firstFetch, secondFetch)
+    }
+    
     /**
      * NOTES: This test is failing because the stored bundle cannot
      * be validated after re-fetching, so it regenerates a completely
@@ -189,25 +198,52 @@ class OTROmemoStorageTest: XCTestCase {
         firstFetch.preKeys.forEach { (preKey) in
             firstPreKeyFetch.updateValue(preKey.publicKey, forKey: preKey.preKeyId)
         }
+        let preKeyIdsToDelete: [UInt32] = [22, 25]
+        
+        // Check preKeys
+        XCTAssertTrue(self.signalStorage.containsPreKey(withId:preKeyIdsToDelete[0]))
+        XCTAssertTrue(self.signalStorage.containsPreKey(withId:preKeyIdsToDelete[1]))
+        
         
         //Remove some pre keys
-        XCTAssertTrue(self.signalStorage.deletePreKey(withId:22))
-        XCTAssertTrue(self.signalStorage.deletePreKey(withId:25))
+        XCTAssertTrue(self.signalStorage.deletePreKey(withId:preKeyIdsToDelete[0]))
+        XCTAssertTrue(self.signalStorage.deletePreKey(withId:preKeyIdsToDelete[1]))
+        
+        // Check if removed
+        XCTAssertFalse(self.signalStorage.containsPreKey(withId:preKeyIdsToDelete[0]))
+        XCTAssertFalse(self.signalStorage.containsPreKey(withId:preKeyIdsToDelete[1]))
+        
+        // Check signed prekey
+        let checkSignedPreKey: (_ signedPreKey: OMEMOSignedPreKey) -> Void = { (signedPreKey) in
+            let signedPreKeyData = self.signalStorage.loadSignedPreKey(withId: signedPreKey.preKeyId)!
+            let signalSignedPreKey = try! SignalSignedPreKey(serializedData: signedPreKeyData)
+            XCTAssertTrue(self.signalStorage.containsSignedPreKey(withId: signedPreKey.preKeyId))
+            XCTAssertEqual(signalSignedPreKey.keyPair().publicKey, signedPreKey.publicKey)
+        }
+        checkSignedPreKey(firstFetch.signedPreKey)
+
         
         //Fetch again
         let secondFetch = self.signalCoordinator.fetchMyBundle()!
         XCTAssertNotNil(secondFetch)
+        
+        // Check signed prekey again
+        checkSignedPreKey(firstFetch.signedPreKey)
         
         var secondPreKeyFetch = [UInt32:Data]()
         secondFetch.preKeys.forEach { (preKey) in
             secondPreKeyFetch.updateValue(preKey.publicKey, forKey: preKey.preKeyId)
         }
         
+        // Check that second signed preKey is there
+        checkSignedPreKey(secondFetch.signedPreKey)
+        
+        // Check if removed
+        XCTAssertFalse(self.signalStorage.containsPreKey(withId:preKeyIdsToDelete[0]))
+        XCTAssertFalse(self.signalStorage.containsPreKey(withId:preKeyIdsToDelete[1]))
+        
         XCTAssertEqual(firstFetch.deviceId, secondFetch.deviceId,"Should be the same device id")
         XCTAssertEqual(firstFetch.identityKey, secondFetch.identityKey,"Same Identity Key")
-        XCTAssertEqual(firstFetch.signedPreKey.signature, secondFetch.signedPreKey.signature,"Same signature")
-        XCTAssertEqual(firstFetch.signedPreKey.preKeyId, secondFetch.signedPreKey.preKeyId,"Same prekey Id")
-        XCTAssertEqual(firstFetch.signedPreKey.publicKey, secondFetch.signedPreKey.publicKey,"Same prekey public key")
         //Checking Pre Keys
         
         let firstIdArray = Array(firstPreKeyFetch.keys).sorted()

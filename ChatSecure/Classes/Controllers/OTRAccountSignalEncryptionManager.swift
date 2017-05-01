@@ -15,7 +15,7 @@ public enum SignalEncryptionError:Error {
 }
 
 /* Performs any Signal operations: creating bundle, decryption, encryption. Use one OTRAccountSignalEncryptionManager per account **/
-open class OTRAccountSignalEncryptionManager {
+open class OTRAccountSignalEncryptionManager: NSObject {
     
     let storage:OTRSignalStorageManager
     var signalContext:SignalContext
@@ -40,21 +40,29 @@ open class OTRAccountSignalEncryptionManager {
             throw SignalEncryptionError.unableToCreateSignalContext
         }
         self.signalContext = context
+        super.init()
         self.storage.delegate = self
     }
 }
 
-extension OTRAccountSignalEncryptionManager {
+extension OTRAccountSignalEncryptionManager: OTRSignalStorageManagerDelegate {
     internal func keyHelper() -> SignalKeyHelper? {
         return SignalKeyHelper(context: self.signalContext)
     }
     
-    public func generateRandomSignedPreKey() -> SignalSignedPreKey? {
+    public func generateNewIdentityKeyPairForAccountKey(_ accountKey:String) -> OTRAccountSignalIdentity {
+        let keyHelper = self.keyHelper()!
+        let keyPair = keyHelper.generateIdentityKeyPair()!
+        let registrationId = keyHelper.generateRegistrationId()
+        return OTRAccountSignalIdentity(accountKey: accountKey, identityKeyPair: keyPair, registrationId: registrationId, signedPreKeyUniqueId: nil)!
+    }
+    
+    public func generateRandomSignedPreKey(identity: OTRAccountSignalIdentity) -> SignalSignedPreKey? {
         
         guard let preKeyId = self.keyHelper()?.generateRegistrationId() else {
             return nil
         }
-        guard let signedPreKey = self.keyHelper()?.generateSignedPreKey(withIdentity: self.identityKeyPair, signedPreKeyId:preKeyId),
+        guard let signedPreKey = self.keyHelper()?.generateSignedPreKey(withIdentity: identity.identityKeyPair, signedPreKeyId:preKeyId),
             let data = signedPreKey.serializedData() else {
             return nil
         }
@@ -68,8 +76,18 @@ extension OTRAccountSignalEncryptionManager {
      * This creates all the information necessary to publish a 'bundle' to your XMPP server via PEP. It generates prekeys 0 to 99.
      */
     public func generateOutgoingBundle(_ preKeyCount:UInt) throws -> OTROMEMOBundleOutgoing {
+        var maybeSignalSignedPreKey: SignalSignedPreKey? = nil
         
-        guard let signedPreKey = self.generateRandomSignedPreKey(), let data = signedPreKey.serializedData() else {
+        var _signalIdentity = self.storage.accountSignalIdentity()
+        if _signalIdentity == nil {
+            _signalIdentity = self.storage.generateNewIdentityKeyPair()
+        }
+        guard let signalIdentity = _signalIdentity else {
+            throw OMEMOBundleError.keyGeneration
+        }
+        
+        
+        guard let signedPreKey = self.generateRandomSignedPreKey(identity: signalIdentity) else {
             throw OMEMOBundleError.keyGeneration
         }
         
@@ -98,7 +116,7 @@ extension OTRAccountSignalEncryptionManager {
             throw OMEMOBundleError.invalid
         }
         
-        _ = self.storage.storeSignedPreKey(data, signedPreKeyId: signedPreKey.preKeyId())
+        
         return OTROMEMOBundleOutgoing(bundle: bundle, preKeys: preKeyDict)
     }
     
@@ -153,12 +171,3 @@ extension OTRAccountSignalEncryptionManager {
     }
 }
 
-extension OTRAccountSignalEncryptionManager: OTRSignalStorageManagerDelegate {
-    
-    public func generateNewIdenityKeyPairForAccountKey(_ accountKey:String) -> OTRAccountSignalIdentity {
-        let keyHelper = self.keyHelper()!
-        let keyPair = keyHelper.generateIdentityKeyPair()!
-        let registrationId = keyHelper.generateRegistrationId()
-        return OTRAccountSignalIdentity(accountKey: accountKey, identityKeyPair: keyPair, registrationId: registrationId)!
-    }
-}

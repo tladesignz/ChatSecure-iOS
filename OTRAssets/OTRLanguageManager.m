@@ -52,7 +52,10 @@ static NSString *const kOTRAppleLanguagesKey  = @"AppleLanguages";
 {
     NSString * currentLocale = [OTRLanguageManager currentLocale];
     NSBundle *bundle = [OTRAssets resourcesBundle];
-    NSParameterAssert(bundle != nil);
+    //NSParameterAssert(bundle != nil);
+    if (!bundle) {
+        return englishString;
+    }
     
     NSString *bundlePath = [bundle pathForResource:@"Localizable" ofType:@"strings" inDirectory:nil forLocalization:currentLocale];
     

@@ -652,11 +652,12 @@ extension OTROMEMOSignalCoordinator:OMEMOStorageDelegate {
     //Always returns most complete bundle with correct count of prekeys
     public func fetchMyBundle() -> OMEMOBundle? {
         var _bundle: OTROMEMOBundleOutgoing? = nil
-        
+        var outError: Error? = nil
         do {
             _bundle = try signalEncryptionManager.storage.fetchOurExistingBundle()
             
         } catch let omemoError as OMEMOBundleError {
+            outError = omemoError
             switch omemoError {
             case .invalid:
                 //DDLogError("Found invalid stored bundle!")
@@ -666,6 +667,7 @@ extension OTROMEMOSignalCoordinator:OMEMOStorageDelegate {
                 break
             }
         } catch let error {
+            outError = error
             //DDLogError("Other error fetching bundle! \(error)")
         }
         let maxTries = 50
@@ -675,6 +677,7 @@ extension OTROMEMOSignalCoordinator:OMEMOStorageDelegate {
             do {
                 _bundle = try self.signalEncryptionManager.generateOutgoingBundle(self.preKeyCount)
             } catch let error {
+                outError = error
                 //DDLogError("Error generating bundle! Try #\(tries)/\(maxTries) \(error)")
             }
         }
@@ -707,7 +710,8 @@ extension OTROMEMOSignalCoordinator:OMEMOStorageDelegate {
         }
         
         let omemoSignedPreKey = OMEMOSignedPreKey(preKeyId: bundle.bundle.signedPreKeyId, publicKey: bundle.bundle.signedPublicPreKey, signature: bundle.bundle.signedPreKeySignature)
-        return OMEMOBundle(deviceId: bundle.bundle.deviceId, identityKey: bundle.bundle.publicIdentityKey, signedPreKey: omemoSignedPreKey, preKeys: preKeysArray)
+        let omemoBundle = OMEMOBundle(deviceId: bundle.bundle.deviceId, identityKey: bundle.bundle.publicIdentityKey, signedPreKey: omemoSignedPreKey, preKeys: preKeysArray)
+        return omemoBundle
     }
 
     public func isSessionValid(_ jid: XMPPJID, deviceId: UInt32) -> Bool {
