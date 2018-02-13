@@ -9,6 +9,8 @@
 import Foundation
 
 open class OTRSplitViewCoordinator: NSObject, OTRConversationViewControllerDelegate, OTRComposeViewControllerDelegate {
+
+    private static let USE_MESSAGEKIT_BASED_CHAT_EXPERIMENT = true
     
     @objc open weak var splitViewController:UISplitViewController? = nil
     let databaseConnection:YapDatabaseConnection
@@ -49,7 +51,20 @@ open class OTRSplitViewCoordinator: NSObject, OTRConversationViewControllerDeleg
         guard let splitVC = self.splitViewController else {
             return
         }
-        
+
+        if OTRSplitViewCoordinator.USE_MESSAGEKIT_BASED_CHAT_EXPERIMENT {
+            let chatVC = OTRChatViewController(threadOwner)
+
+            //iPad check where there are two navigation controllers and we want the second one
+            if splitVC.viewControllers.count > 1 && ((splitVC.viewControllers[1] as? UINavigationController)?.viewControllers.contains(chatVC)) ?? false {
+            } else if splitVC.viewControllers.count == 1 && ((splitVC.viewControllers.first as? UINavigationController)?.viewControllers.contains(chatVC)) ?? false {
+            } else {
+                splitVC.showDetailViewController(chatVC, sender: sender)
+            }
+
+            return
+        }
+
         let appDelegate = UIApplication.shared.delegate as? OTRAppDelegate
         
         let messagesViewController:OTRMessagesViewController? = appDelegate?.messagesViewController

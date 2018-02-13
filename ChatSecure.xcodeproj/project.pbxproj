@@ -129,6 +129,7 @@
 		92CC68F11F42FF8D0006CDF8 /* OTRComposeGroupBuddyCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92CC68F01F42FF8D0006CDF8 /* OTRComposeGroupBuddyCell.swift */; };
 		92CC68F41F4309B50006CDF8 /* OTRComposeGroupBuddyCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 92CC68F21F43054E0006CDF8 /* OTRComposeGroupBuddyCell.xib */; };
 		92DC0F761F442DBA00318E49 /* OTRBuddyInfoCheckableCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92DC0F751F442DBA00318E49 /* OTRBuddyInfoCheckableCell.swift */; };
+		A037A2B82032FA15000DC9AD /* OTRChatViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A037A2B72032FA15000DC9AD /* OTRChatViewController.swift */; };
 		D9040CB11EF1EB050027A862 /* OTRMediaItem+Private.h in Headers */ = {isa = PBXBuildFile; fileRef = D9040CB01EF1EB050027A862 /* OTRMediaItem+Private.h */; };
 		D90E711C1E6CB4360008D83B /* AccountDetailViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D90E711B1E6CB4360008D83B /* AccountDetailViewController.swift */; };
 		D917CCDE1E553007003636B7 /* ServerCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = D917CCDD1E553007003636B7 /* ServerCheck.swift */; };
@@ -1043,6 +1044,7 @@
 		92DC0F751F442DBA00318E49 /* OTRBuddyInfoCheckableCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OTRBuddyInfoCheckableCell.swift; sourceTree = "<group>"; };
 		962ED3D89B1F330A2A34928B /* Pods-ChatSecureCorePods-ChatSecureTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ChatSecureCorePods-ChatSecureTests.debug.xcconfig"; path = "Pods/Target Support Files/Pods-ChatSecureCorePods-ChatSecureTests/Pods-ChatSecureCorePods-ChatSecureTests.debug.xcconfig"; sourceTree = "<group>"; };
 		9F52F68785B05428F442DF47 /* Pods_ChatSecureCorePods_ChatSecure.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_ChatSecureCorePods_ChatSecure.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A037A2B72032FA15000DC9AD /* OTRChatViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OTRChatViewController.swift; sourceTree = "<group>"; };
 		C492FFACC855CE12E882968E /* Pods_ChatSecureCorePods_ChatSecureUITests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_ChatSecureCorePods_ChatSecureUITests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		C4E2DF261B1D18F006F8B3A6 /* Pods-ChatSecureCorePods-ChatSecureCore.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ChatSecureCorePods-ChatSecureCore.debug.xcconfig"; path = "Pods/Target Support Files/Pods-ChatSecureCorePods-ChatSecureCore/Pods-ChatSecureCorePods-ChatSecureCore.debug.xcconfig"; sourceTree = "<group>"; };
 		CCD1F8E85C658C8D3865B584 /* Pods.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1651,6 +1653,7 @@
 				63C0C4441BE184910086B529 /* OTRRoomOccupantsViewController.swift */,
 				6325DD5F1E20390700C88944 /* OTRLogListViewController.swift */,
 				92CC68C01F42F11D0006CDF8 /* OTRComposeGroupViewController.swift */,
+				A037A2B92032FA5D000DC9AD /* Chat View Controller */,
 			);
 			path = "View Controllers";
 			sourceTree = "<group>";
@@ -2000,6 +2003,14 @@
 				63FA54901A7B2C2E00F2AEBB /* OTRPauseView.m */,
 			);
 			name = "AudioBubble Views";
+			sourceTree = "<group>";
+		};
+		A037A2B92032FA5D000DC9AD /* Chat View Controller */ = {
+			isa = PBXGroup;
+			children = (
+				A037A2B72032FA15000DC9AD /* OTRChatViewController.swift */,
+			);
+			name = "Chat View Controller";
 			sourceTree = "<group>";
 		};
 		C1E90FC219EFFEE2E8C7EECF /* Pods */ = {
@@ -2472,7 +2483,7 @@
 			attributes = {
 				CLASSPREFIX = OTR;
 				LastSwiftMigration = 0700;
-				LastSwiftUpdateCheck = 0820;
+                LastSwiftUpdateCheck = 0820;
 				LastUpgradeCheck = 0900;
 				ORGANIZATIONNAME = "Chris Ballinger";
 				TargetAttributes = {
@@ -2485,9 +2496,9 @@
 					};
 					6396AF991A169D54009F3E6C = {
 						CreatedOnToolsVersion = 6.1;
-						DevelopmentTeam = 4T8JLQR6GR;
+                        DevelopmentTeam = 4T8JLQR6GR;
 						LastSwiftMigration = 0900;
-						ProvisioningStyle = Automatic;
+                        ProvisioningStyle = Automatic;
 						SystemCapabilities = {
 							com.apple.DataProtection = {
 								enabled = 1;
@@ -2699,6 +2710,7 @@
 				"${BUILT_PRODUCTS_DIR}/KissXML/KissXML.framework",
 				"${BUILT_PRODUCTS_DIR}/Kvitto/Kvitto.framework",
 				"${BUILT_PRODUCTS_DIR}/MWFeedParser/MWFeedParser.framework",
+				"${BUILT_PRODUCTS_DIR}/MessageKit/MessageKit.framework",
 				"${BUILT_PRODUCTS_DIR}/Navajo/Navajo.framework",
 				"${BUILT_PRODUCTS_DIR}/OTRKit/OTRKit.framework",
 				"${BUILT_PRODUCTS_DIR}/OpenInChrome/OpenInChrome.framework",
@@ -2738,6 +2750,7 @@
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/KissXML.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/Kvitto.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/MWFeedParser.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/MessageKit.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/Navajo.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/OTRKit.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/OpenInChrome.framework",
@@ -2805,6 +2818,7 @@
 				"${BUILT_PRODUCTS_DIR}/KissXML/KissXML.framework",
 				"${BUILT_PRODUCTS_DIR}/Kvitto/Kvitto.framework",
 				"${BUILT_PRODUCTS_DIR}/MWFeedParser/MWFeedParser.framework",
+				"${BUILT_PRODUCTS_DIR}/MessageKit/MessageKit.framework",
 				"${BUILT_PRODUCTS_DIR}/Navajo/Navajo.framework",
 				"${BUILT_PRODUCTS_DIR}/OTRKit/OTRKit.framework",
 				"${BUILT_PRODUCTS_DIR}/OpenInChrome/OpenInChrome.framework",
@@ -2844,6 +2858,7 @@
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/KissXML.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/Kvitto.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/MWFeedParser.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/MessageKit.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/Navajo.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/OTRKit.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/OpenInChrome.framework",
@@ -3130,6 +3145,7 @@
 				D93DDABC1BA79A2500CD8331 /* OTROpenInFacebookActivity.m in Sources */,
 				D9B9B1331DC7F3AC0007F5A7 /* UserInfoProfileCell.swift in Sources */,
 				D97070A71EEF3909004FEBDE /* MediaDownloadView.swift in Sources */,
+				A037A2B82032FA15000DC9AD /* OTRChatViewController.swift in Sources */,
 				D9AC941A1FCD0DE50051B457 /* XMPPManager.swift in Sources */,
 				D93DDABD1BA79A2500CD8331 /* OTROpenInTwitterActivity.m in Sources */,
 				63BAB26D1C863C60005185F3 /* PushMessage.swift in Sources */,
@@ -3570,7 +3586,7 @@
 				CODE_SIGN_ENTITLEMENTS = ChatSecure/ChatSecure.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
+                DEVELOPMENT_TEAM = "";
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Carthage/Build/iOS",
@@ -3584,10 +3600,10 @@
 				INFOPLIST_FILE = ChatSecure/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.chrisballinger.ChatSecure;
+                PRODUCT_BUNDLE_IDENTIFIER = com.chrisballinger.ChatSecure;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "";
-				PROVISIONING_PROFILE_SPECIFIER = "";
+                PROVISIONING_PROFILE = "";
+                PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 4.0;
 			};
@@ -3621,7 +3637,7 @@
 				INFOPLIST_FILE = ChatSecure/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.chrisballinger.ChatSecure;
+                PRODUCT_BUNDLE_IDENTIFIER = com.chrisballinger.ChatSecure;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";

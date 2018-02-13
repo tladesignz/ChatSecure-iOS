@@ -31,6 +31,7 @@ abstract_target 'ChatSecureCorePods' do
   # pod 'ParkedTextField', '~> 0.3.1'
   pod 'ParkedTextField', :git => 'https://github.com/gmertk/ParkedTextField.git', :commit => '43f1d3b' # Swift 4
 
+  pod 'MessageKit'
 
   pod 'JSQMessagesViewController', :path => 'Submodules/JSQMessagesViewController/JSQMessagesViewController.podspec'
 
